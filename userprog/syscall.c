@@ -137,6 +137,26 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	}
 }
 
+void halt(void)
+{
+	power_off();
+}
+
+void exit(int status)
+{
+	struct thread *current = thread_current();
+
+	// 실행 중인 스레드의 종료 상태를 저장해준다.
+	current->exit_status = status;
+
+	// 프로세스 종료 메시지를 출력한다.
+	// 출력 양식: “프로세스이름 : exit(종료상태)”
+	printf("%s: exit(%d)\n", current->name, status);
+
+	// 스레드를 종료한다.
+	thread_exit();
+}
+
 int wait(int pid)
 {
 	return process_wait(pid);
@@ -144,22 +164,6 @@ int wait(int pid)
 int fork(const char *thread_name, struct intr_frame *f)
 {
 	return process_fork(thread_name, f);
-}
-
-void halt(void)
-{
-	power_off();
-}
-void exit(int status)
-{
-	/* 실행중인 스레드 구조체를 가져옴 */
-	struct thread *current = thread_current();
-	current->exit_status = status;
-	/* 프로세스 종료 메시지 출력,
-	출력 양식: “프로세스이름 : exit(종료상태 )” */
-	printf("%s: exit(%d)\n", current->name, status);
-	/* 스레드 종료 */
-	thread_exit();
 }
 
 int exec(char *cmd_line)
@@ -366,7 +370,8 @@ void close(int fd)
 
 void check_address(void *addr)
 {
-	if (addr == NULL || !is_user_vaddr(addr))
+	struct thread *cur_t = thread_current();
+	if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(cur_t->pml4, addr)== NULL)
 	{
 		exit(-1);
 	}
