@@ -4,8 +4,12 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
-#include "lib/kernel/hash.h"
-
+static unsigned
+page_hash (const struct hash_elem *p_, void *aux UNUSED);
+static bool
+page_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED);
+static struct page *page_lookup (const void *address);
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -67,8 +71,7 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
-
-	return page;
+	return page_lookup(va);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -77,6 +80,10 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
+	struct hash_elem * result = hash_insert(&spt->pages, &page->hash_elem);
+	if(result == NULL)
+		succ = true;
+	
 
 	return succ;
 }
@@ -117,6 +124,11 @@ vm_get_frame (void) {
 
 	ASSERT (frame != NULL);
 	ASSERT (frame->page == NULL);
+	void *page = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (page == NULL){
+		return NULL;
+	}
+	
 	return frame;
 }
 
@@ -176,8 +188,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	struct hash *pages = spt->pages;
-	hash_init (pages, page_hash, page_less, NULL);
+	hash_init (&spt->pages, page_hash, page_less, NULL);
 }
 
 /* Returns a hash value for page p. */
@@ -195,6 +206,17 @@ page_less (const struct hash_elem *a_,
   const struct page *b = hash_entry (b_, struct page, hash_elem);
 
   return a->va < b->va;
+}
+
+/* Returns the page containing the given virtual address, or a null pointer if no such page exists. */
+struct page *
+page_lookup (const void *address) {
+	struct page p;
+	struct hash_elem *e;
+	
+	p.va = address;
+	e = hash_find (&thread_current()->spt.pages, &p.hash_elem);
+	return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
 }
 
 /* Copy supplemental page table from src to dst */

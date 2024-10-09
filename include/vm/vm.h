@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 
-#include "lib/kernel/hash.h"
+#include <hash.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -48,6 +48,7 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	struct hash_elem hash_elem; /*해시 테이블 요소*/
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -60,7 +61,6 @@ struct page {
 #endif
 	};
 
-	struct hash_elem *hash_elem; /*해시 테이블 요소*/
 };
 
 /* The representation of "frame" */
