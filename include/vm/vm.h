@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 
+#include "lib/kernel/hash.h"
+
 enum vm_type {
 	/* page not initialized */
 	VM_UNINIT = 0,
@@ -57,6 +59,8 @@ struct page {
 		struct page_cache page_cache;
 #endif
 	};
+
+	struct hash_elem *hash_elem; /*해시 테이블 요소*/
 };
 
 /* The representation of "frame" */
@@ -85,6 +89,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
+	struct hash *pages;
 };
 
 #include "threads/thread.h"
