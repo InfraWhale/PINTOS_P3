@@ -4,7 +4,8 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/mmu.h"
-#include "userprog/process.c"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 
 static unsigned
 page_hash (const struct hash_elem *p_, void *aux UNUSED);
@@ -67,14 +68,34 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
+	void *va = pg_round_down(upage);
+	struct page* page = spt_find_page (spt, va);
+
 	/* Check wheter the upage is already occupied or not. */
-	if (spt_find_page (spt, upage) == NULL) {
+	if (page == NULL) {
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
+		page = malloc(sizeof(struct page));
+		if (page == NULL)
+			goto err;
+		bool (*initializer)(struct page *, enum vm_type, void *);
+		switch (type){
+		case VM_ANON:
+			initializer = anon_initializer;
+			break;
+		case VM_FILE:
+			initializer = file_backed_initializer;
+			break;
+		default:
+			goto err;
+		}
 
+		uninit_new(page, va, init, type, aux, initializer);
 		/* TODO: Insert the page into the spt. */
+		spt_insert_page(spt, page);
 	}
+	return true;
 err:
 	return false;
 }
@@ -158,10 +179,13 @@ bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
-	struct page *page = NULL;
 	/* TODO: Validate the fault */
+	if(addr == NULL || is_kernel_vaddr(addr))
+		return false;
+	
+	void *va = pg_round_down(addr);
+	struct page *page = spt_find_page(spt, va);
 	/* TODO: Your code goes here */
-
 	return vm_do_claim_page (page);
 }
 
