@@ -3,19 +3,32 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "threads/mmu.h"
+#include "userprog/process.c"
 
 static unsigned
 page_hash (const struct hash_elem *p_, void *aux UNUSED);
 static bool
 page_less (const struct hash_elem *a_,
            const struct hash_elem *b_, void *aux UNUSED);
+unsigned
+frame_hash (const struct hash_elem *p_, void *aux UNUSED);
+
+bool
+frame_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED);
+
 static struct page *page_lookup (const void *address);
+
+struct hash frame_table;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
 vm_init (void) {
 	vm_anon_init ();
 	vm_file_init ();
+	hash_init(&frame_table, frame_hash, frame_less, NULL);
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
@@ -80,7 +93,7 @@ spt_insert_page (struct supplemental_page_table *spt UNUSED,
 		struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-	struct hash_elem * result = hash_insert(&spt->pages, &page->hash_elem);
+	struct hash_elem * result = hash_insert(&spt->pages, &page->page_elem);
 	if(result == NULL)
 		succ = true;
 	
@@ -119,16 +132,14 @@ vm_evict_frame (void) {
  * space.*/
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: Fill this function. */
-
+	struct frame *frame = malloc(sizeof(struct frame));
 	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
-	void *page = palloc_get_page(PAL_USER | PAL_ZERO);
-	if (page == NULL){
-		return NULL;
-	}
+	/* TODO: Fill this function. */
+	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
 	
+	ASSERT (frame->page == NULL);
+	
+	hash_insert(&frame_table, &frame->frame_elem);
 	return frame;
 }
 
@@ -165,8 +176,14 @@ vm_dealloc_page (struct page *page) {
 /* Claim the page that allocate on VA. */
 bool
 vm_claim_page (void *va UNUSED) {
-	struct page *page = NULL;
+	struct thread *cur = thread_current();
+	struct page *page = spt_find_page(&cur->spt, va);
 	/* TODO: Fill this function */
+	if (page == NULL){
+		page = malloc(sizeof page);
+		page->va = va;
+		spt_insert_page(&cur->spt, page);
+	}
 
 	return vm_do_claim_page (page);
 }
@@ -181,7 +198,10 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
-
+	struct thread *cur = thread_current();
+	if (pml4_get_page(&cur->pml4, page->va) == NULL)
+		pml4_set_page(&cur->pml4, page->va, frame->kva, page->is_writable); // 일단 읽기 전용(4번째 인자)으로 해놓음
+	
 	return swap_in (page, frame->kva);
 }
 
@@ -194,7 +214,7 @@ supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
 /* Returns a hash value for page p. */
 unsigned
 page_hash (const struct hash_elem *p_, void *aux UNUSED) {
-  const struct page *p = hash_entry (p_, struct page, hash_elem);
+  const struct page *p = hash_entry (p_, struct page, page_elem);
   return hash_bytes (&p->va, sizeof p->va);
 }
 
@@ -202,21 +222,36 @@ page_hash (const struct hash_elem *p_, void *aux UNUSED) {
 bool
 page_less (const struct hash_elem *a_,
            const struct hash_elem *b_, void *aux UNUSED) {
-  const struct page *a = hash_entry (a_, struct page, hash_elem);
-  const struct page *b = hash_entry (b_, struct page, hash_elem);
+  const struct page *a = hash_entry (a_, struct page, page_elem);
+  const struct page *b = hash_entry (b_, struct page, page_elem);
 
   return a->va < b->va;
 }
 
+unsigned
+frame_hash (const struct hash_elem *p_, void *aux UNUSED) {
+  const struct frame *p = hash_entry (p_, struct frame, frame_elem);
+  return hash_bytes (&p->kva, sizeof p->kva);
+}
+
+bool
+frame_less (const struct hash_elem *a_,
+           const struct hash_elem *b_, void *aux UNUSED) {
+  const struct frame *a = hash_entry (a_, struct frame, frame_elem);
+  const struct frame *b = hash_entry (b_, struct frame, frame_elem);
+
+  return a->kva < b->kva;
+}
+
 /* Returns the page containing the given virtual address, or a null pointer if no such page exists. */
 struct page *
-page_lookup (const void *address) {
+page_lookup (const void *va) {
 	struct page p;
 	struct hash_elem *e;
 	
-	p.va = address;
-	e = hash_find (&thread_current()->spt.pages, &p.hash_elem);
-	return e != NULL ? hash_entry (e, struct page, hash_elem) : NULL;
+	p.va = pg_round_down(va);
+	e = hash_find (&thread_current()->spt.pages, &p.page_elem);
+	return e != NULL ? hash_entry (e, struct page, page_elem) : NULL;
 }
 
 /* Copy supplemental page table from src to dst */
