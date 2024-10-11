@@ -283,6 +283,7 @@ int process_exec(void *f_name)
 
 void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받았으므로 이중 포인터 사용
 {
+	//printf("argument_stack !!!\n");
     // 프로그램 이름, 인자 문자열 push
     for (int i = count - 1; i > -1; i--)
     {
@@ -316,6 +317,8 @@ void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받�
     // return address push
     (*rsp) -= 8;
     **(void ***)rsp = 0; // void* 타입의 0 추가
+
+	//printf("argument_stack: Final rsp = %p\n", *rsp);
 }
 
 /* 스레드 TID가 종료될 때까지 기다린 후 그 종료 상태를 반환합니다.
@@ -561,6 +564,8 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry; // entry point 초기화
+	//printf("rip set!!! = %p\n", if_->rsp);
+	
 	// rip: 프로그램 카운터(실행할 다음 인스트럭션의 메모리  주소)
 
 	/* TODO: Your code goes here.
@@ -777,15 +782,16 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
+	//printf("lazy load start!!!\n");
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
 	struct load_info *info = (struct load_info *)aux;
-	if(vm_claim_page(page->va))
-		return false;
+	// if(vm_claim_page(page->va))
+	// 	return false;
 	uint8_t *kpage = page->frame->kva;
-	if (kpage == NULL)
-		return false;
+	// if (kpage == NULL)
+	// 	return false;
 
 	file_seek(info->file, info->ofs);
 	if (info->file != NULL && file_read(info->file, kpage, info->page_read_bytes) != (int)info->page_read_bytes){
@@ -798,6 +804,9 @@ lazy_load_segment(struct page *page, void *aux)
 	memset(kpage + info->page_read_bytes, 0, info->page_zero_bytes);
 	free(aux);
 
+	//file_seek(info->file, info->ofs);
+
+	//printf("lazy load end!!!\n");
 	return true;
 }
 
@@ -819,12 +828,14 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
+	//printf("load start!!!\n");
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
 	enum vm_type type = file == NULL ? VM_ANON : VM_FILE;
 
+	//file_seek (file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
@@ -835,8 +846,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct load_info *aux = (struct load_info  *)malloc(sizeof(struct load_info));
-		if(aux == NULL)	
-			return false;
+		// if(aux == NULL)	
+		// 	return false;
 		aux->file = file;
 		aux->page_read_bytes = page_read_bytes;
 		aux->page_zero_bytes = page_zero_bytes;
@@ -851,8 +862,9 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
-		ofs += page_read_bytes;
+		ofs += page_read_bytes; // @@@ 왜???
 	}
+	//printf("load end!!!\n");
 	return true;
 }
 
@@ -860,6 +872,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack(struct intr_frame *if_)
 {
+	//printf("setup_stack start!!!\n");
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
@@ -873,6 +886,8 @@ setup_stack(struct intr_frame *if_)
 			if_->rsp = USER_STACK;
 	}
 
+	// 현재 스택 포인터와 관련 레지스터 출력
+    //printf("setup_stack !!! : rsp = %p\n", if_->rsp);
 	return success;
 }
 #endif /* VM */
