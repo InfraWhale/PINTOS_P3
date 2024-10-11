@@ -19,7 +19,7 @@ bool
 frame_less (const struct hash_elem *a_,
            const struct hash_elem *b_, void *aux UNUSED);
 
-static struct page *page_lookup (const void *address);
+static struct page *page_lookup (struct supplemental_page_table *spt, const void *address);
 
 struct hash frame_table;
 
@@ -92,10 +92,11 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 
 		uninit_new(page, va, init, type, aux, initializer);
+		page->is_writable = writable;
+		
 		/* TODO: Insert the page into the spt. */
-		spt_insert_page(spt, page);
+		return spt_insert_page(spt, page);
 	}
-	return true;
 err:
 	return false;
 }
@@ -105,7 +106,7 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 	/* TODO: Fill this function. */
-	return page_lookup(va);
+	return page_lookup(spt, va);
 }
 
 /* Insert PAGE into spt with validation. */
@@ -157,6 +158,8 @@ vm_get_frame (void) {
 	ASSERT (frame != NULL);
 	/* TODO: Fill this function. */
 	frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+	if(frame->kva == NULL)
+		PANIC ("todo");
 	
 	ASSERT (frame->page == NULL);
 	
@@ -203,11 +206,8 @@ vm_claim_page (void *va UNUSED) {
 	struct thread *cur = thread_current();
 	struct page *page = spt_find_page(&cur->spt, va);
 	/* TODO: Fill this function */
-	if (page == NULL){
-		page = malloc(sizeof page);
-		page->va = va;
-		spt_insert_page(&cur->spt, page);
-	}
+	if (page == NULL)
+		return false;
 
 	return vm_do_claim_page (page);
 }
@@ -224,7 +224,7 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct thread *cur = thread_current();
 	if (pml4_get_page(&cur->pml4, page->va) == NULL)
-		pml4_set_page(&cur->pml4, page->va, frame->kva, page->is_writable); // 일단 읽기 전용(4번째 인자)으로 해놓음
+		pml4_set_page(&cur->pml4, page->va, frame->kva, page->is_writable);
 	
 	return swap_in (page, frame->kva);
 }
@@ -269,12 +269,12 @@ frame_less (const struct hash_elem *a_,
 
 /* Returns the page containing the given virtual address, or a null pointer if no such page exists. */
 struct page *
-page_lookup (const void *va) {
+page_lookup (struct supplemental_page_table *spt, const void *va) {
 	struct page p;
 	struct hash_elem *e;
 	
 	p.va = pg_round_down(va);
-	e = hash_find (&thread_current()->spt.pages, &p.page_elem);
+	e = hash_find (&spt->pages, &p.page_elem);
 	return e != NULL ? hash_entry (e, struct page, page_elem) : NULL;
 }
 

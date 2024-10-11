@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "intrinsic.h": "c",
-        "mmu.h": "c"
+        "mmu.h": "c",
+        "malloc.h": "c"
     }
 }

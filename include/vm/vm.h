@@ -49,11 +49,11 @@ struct page {
 
 	/* Your implementation */
 	struct hash_elem page_elem; /*해시 테이블 요소*/
-	bool is_present;
+	// bool is_present;
 	bool is_writable;
-	bool is_user;
-	bool is_accessed;
-	bool is_dirty;
+	// bool is_user;
+	// bool is_accessed;
+	// bool is_dirty;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -86,6 +86,15 @@ struct page_operations {
 	enum vm_type type;
 };
 
+// for aux
+struct load_info{
+	struct file *file;
+	size_t page_read_bytes;
+	size_t page_zero_bytes;
+	off_t ofs;
+	bool writable;
+};
+
 #define swap_in(page, v) (page)->operations->swap_in ((page), v)
 #define swap_out(page) (page)->operations->swap_out (page)
 #define destroy(page) \
@@ -95,7 +104,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash *pages;
+	struct hash pages;
 };
 
 #include "threads/thread.h"
