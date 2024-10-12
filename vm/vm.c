@@ -6,6 +6,7 @@
 #include "threads/mmu.h"
 #include "userprog/process.h"
 #include "userprog/syscall.h"
+#include <string.h>
 
 static unsigned
 page_hash (const struct hash_elem *p_, void *aux UNUSED);
@@ -297,8 +298,36 @@ page_lookup (struct supplemental_page_table *spt, const void *va) {
 
 /* Copy supplemental page table from src to dst */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src) {
+	struct hash_iterator i;
+	struct hash_elem *elem;
+	hash_first(&i, &src->pages);
+	while ((elem = hash_next(&i))){
+		struct page *p = hash_entry(elem, struct page, page_elem);
+		struct page *copy = (struct page *)malloc(sizeof(struct page));
+
+		copy->is_writable = p->is_writable;
+		copy->va = p->va;
+		copy->operations = p->operations;
+
+		if (VM_TYPE(p->operations->type) == VM_UNINIT){
+			copy->frame = NULL;
+			copy->uninit = p->uninit;
+			if (!spt_insert_page(dst, copy))
+				return false;
+		}else{
+			if(vm_alloc_page(copy->operations->type, copy->va, copy->is_writable)
+			&& vm_claim_page(copy->va)){
+				memcpy(copy->frame->kva, p->frame->kva, PGSIZE);
+				copy->frame->page = copy;
+			}else
+				return false;
+		}
+		
+	}
+	return true;
+	
 }
 
 /* Free the resource hold by the supplemental page table */
