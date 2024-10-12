@@ -21,6 +21,7 @@ frame_less (const struct hash_elem *a_,
            const struct hash_elem *b_, void *aux UNUSED);
 
 static struct page *page_lookup (struct supplemental_page_table *spt, const void *address);
+static void page_dealloc(struct hash_elem *e, void *aux);
 
 struct hash frame_table;
 
@@ -305,20 +306,15 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 	hash_first(&i, &src->pages);
 	while ((elem = hash_next(&i))){
 		struct page *p = hash_entry(elem, struct page, page_elem);
-		struct page *copy = (struct page *)malloc(sizeof(struct page));
-
-		copy->is_writable = p->is_writable;
-		copy->va = p->va;
-		copy->operations = p->operations;
+		enum vm_type type = page_get_type(p);
 
 		if (VM_TYPE(p->operations->type) == VM_UNINIT){
-			copy->frame = NULL;
-			copy->uninit = p->uninit;
-			if (!spt_insert_page(dst, copy))
+			if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, p->uninit.aux))
 				return false;
 		}else{
-			if(vm_alloc_page(copy->operations->type, copy->va, copy->is_writable)
-			&& vm_claim_page(copy->va)){
+			if(vm_alloc_page(type, p->va, p->is_writable)
+			&& vm_claim_page(p->va)){
+				struct page* copy = spt_find_page(dst, p->va);
 				memcpy(copy->frame->kva, p->frame->kva, PGSIZE);
 				copy->frame->page = copy;
 			}else
@@ -335,4 +331,22 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	// struct hash_iterator i;
+	// struct frame* frame;
+    // hash_first (&i, &spt->pages);
+	// while (hash_next(&i)){
+	// 	struct page *target = hash_entry (hash_cur (&i), struct page, page_elem);
+	// 	frame = target->frame;
+	// 	// //file-backed file인 경우
+	// 	// if(target->operations->type == VM_FILE){
+	// 	// 	do_munmap(target->va);
+	// 	// }
+	// 	free(frame);
+	// }
+	
+	// hash_destroy(&spt->pages,page_dealloc);
+}
+
+void page_dealloc(struct hash_elem *e, void *aux){
+	// free(hash_entry(e, struct page, page_elem));
 }

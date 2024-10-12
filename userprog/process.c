@@ -833,9 +833,10 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
 
-	enum vm_type type = file == NULL ? VM_ANON : VM_FILE;
+	// enum vm_type type = file == NULL ? VM_ANON : VM_FILE;
 
-	//file_seek (file, ofs);
+	// printf("ofs start %d\n", ofs);
+	file_seek (file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* Do calculate how to fill this page.
@@ -843,6 +844,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		// printf("page_read_bytes %d   ---   ", page_read_bytes);
+		// printf("page_zero_bytes %d\n", page_zero_bytes);
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct load_info *aux = (struct load_info  *)malloc(sizeof(struct load_info));
@@ -853,8 +856,9 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		aux->page_zero_bytes = page_zero_bytes;
 		aux->writable = writable;
 		aux->ofs = ofs;
+		// printf("now ofs %d\n", ofs);
 
-		if (!vm_alloc_page_with_initializer(type, upage,
+		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
 
@@ -865,6 +869,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		ofs += page_read_bytes;
 	}
 	//printf("load end!!!\n");
+	// 110011001100110011001100110100
+	// 110011001100110011001100110100
 	return true;
 }
 
