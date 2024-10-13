@@ -20,6 +20,7 @@
 #include "intrinsic.h"
 
 #include "userprog/syscall.h"
+#include <stdio.h>
 
 #ifdef VM
 #include "vm/vm.h"
@@ -284,7 +285,7 @@ int process_exec(void *f_name)
 
 void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받았으므로 이중 포인터 사용
 {
-	//printf("argument_stack !!!\n");
+	// printf("argument_stack !!!\n");
     // 프로그램 이름, 인자 문자열 push
     for (int i = count - 1; i > -1; i--)
     {
@@ -319,7 +320,7 @@ void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받�
     (*rsp) -= 8;
     **(void ***)rsp = 0; // void* 타입의 0 추가
 
-	//printf("argument_stack: Final rsp = %p\n", *rsp);
+	// printf("argument_stack: Final rsp = %p\n", *rsp);
 }
 
 /* 스레드 TID가 종료될 때까지 기다린 후 그 종료 상태를 반환합니다.
@@ -347,6 +348,7 @@ int process_wait(tid_t child_tid UNUSED)
 void process_exit(void)
 {
     struct thread *cur = thread_current();
+	// printf("process_exit start \n");
 
     // 1) FDT의 모든 파일을 닫는다.
     for (int i = 2; i < FDT_COUNT_LIMIT; i++) {
@@ -363,6 +365,7 @@ void process_exit(void)
     sema_up(&cur->wait_sema);
     // 4) 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다.
     sema_down(&cur->exit_sema);
+	// printf("process_exit end \n");
 }
 
 /* 현재 프로세스의 자원을 해제합니다. */
@@ -485,7 +488,7 @@ load(const char *file_name, struct intr_frame *if_)
 	file = filesys_open(file_name);
 	if (file == NULL)
 	{
-		printf("load: %s: open failed\n", file_name);
+		// printf("load: %s: open failed\n", file_name);
 		goto done;
 	}
 
@@ -493,7 +496,7 @@ load(const char *file_name, struct intr_frame *if_)
 	if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr || memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 || ehdr.e_machine != 0x3E // amd64
 		|| ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) || ehdr.e_phnum > 1024)
 	{
-		printf("load: %s: error loading executable\n", file_name);
+		// printf("load: %s: error loading executable\n", file_name);
 		goto done;
 	}
 
@@ -565,7 +568,7 @@ load(const char *file_name, struct intr_frame *if_)
 
 	/* Start address. */
 	if_->rip = ehdr.e_entry; // entry point 초기화
-	//printf("rip set!!! = %p\n", if_->rsp);
+	// printf("rip set!!! = %p\n", if_->rsp);
 	
 	// rip: 프로그램 카운터(실행할 다음 인스트럭션의 메모리  주소)
 
@@ -648,6 +651,7 @@ int process_add_file(struct file *f)
 
 struct file *process_get_file(int fd)
 {
+	// printf("process_get_file start!!!\n");
 	struct thread *curr = thread_current();
 	struct file **fdt = curr->fdt;
 
@@ -657,6 +661,7 @@ struct file *process_get_file(int fd)
 		return NULL;
 	
 	// 파일 디스크럽터에 해당하는 파일 객체를 반환한다.
+	// printf("process_get_file end!!!\n");
 	return fdt[fd];
 }
 
@@ -728,7 +733,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* 프로세스의 주소 공간에 페이지를 추가합니다. */
 		if (!install_page(upage, kpage, writable))
 		{
-			printf("fail\n");
+			// printf("fail\n");
 			palloc_free_page(kpage);
 			return false;
 		}
@@ -783,7 +788,7 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
-	printf("lazy load start!!!\n");
+	// printf("lazy load start!!!\n");
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
@@ -794,21 +799,19 @@ lazy_load_segment(struct page *page, void *aux)
 	// if (kpage == NULL)
 	// 	return false;
 
-	printf("now ofs %d\n", info->ofs);
+	// printf("now ofs %d\n", info->ofs);
 	file_seek(info->file, info->ofs);
 	if (info->file != NULL && file_read(info->file, kpage, info->page_read_bytes) != (int)info->page_read_bytes){
 		palloc_free_page(kpage);
 		// pml4_clear_page(&thread_current()->pml4, page->va);
-		free(aux);
 		// free(page);
 		return false;
 	}
 	memset(kpage + info->page_read_bytes, 0, info->page_zero_bytes);
-	free(aux);
 
 	//file_seek(info->file, info->ofs);
 
-	printf("lazy load end!!!\n");
+	// printf("lazy load end!!!\n");
 	return true;
 }
 
@@ -830,12 +833,10 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-	printf("load start!!!\n");
+	// printf("load start!!!\n");
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
-
-	// enum vm_type type = file == NULL ? VM_ANON : VM_FILE;
 
 	// printf("ofs start %d\n", ofs);
 	file_seek (file, ofs);
@@ -859,7 +860,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		aux->page_zero_bytes = page_zero_bytes;
 		aux->writable = writable;
 		aux->ofs = ofs;
-		printf("now ofs %d\n", ofs);
+		// printf("now ofs %d\n", ofs);
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
@@ -872,7 +873,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		upage += PGSIZE;
 		ofs += page_read_bytes;
 	}
-	printf("load end!!!\n");
+	// printf("load end!!!\n");
 	// 110011001100110011001100110100
 	// 110011001100110011001100110100
 	return true;
@@ -882,7 +883,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack(struct intr_frame *if_)
 {
-	//printf("setup_stack start!!!\n");
+	// printf("setup_stack start!!!\n");
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
@@ -897,7 +898,7 @@ setup_stack(struct intr_frame *if_)
 	}
 
 	// 현재 스택 포인터와 관련 레지스터 출력
-    //printf("setup_stack !!! : rsp = %p\n", if_->rsp);
+    // printf("setup_stack !!! : rsp = %p\n", if_->rsp);
 	return success;
 }
 #endif /* VM */
