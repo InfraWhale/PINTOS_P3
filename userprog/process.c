@@ -245,6 +245,7 @@ int process_exec(void *f_name)
 
     /* We first kill the current context */
     process_cleanup();
+	//supplemental_page_table_init(&thread_current()->spt); // cleanup 할때 사라지는거 같아서 일단 추가해봄 @@@
 
     // Argument Passing ~
     char *parse[64];
@@ -782,7 +783,7 @@ install_page(void *upage, void *kpage, bool writable)
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
-	//printf("lazy load start!!!\n");
+	printf("lazy load start!!!\n");
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
@@ -793,6 +794,7 @@ lazy_load_segment(struct page *page, void *aux)
 	// if (kpage == NULL)
 	// 	return false;
 
+	printf("now ofs %d\n", info->ofs);
 	file_seek(info->file, info->ofs);
 	if (info->file != NULL && file_read(info->file, kpage, info->page_read_bytes) != (int)info->page_read_bytes){
 		palloc_free_page(kpage);
@@ -806,7 +808,7 @@ lazy_load_segment(struct page *page, void *aux)
 
 	//file_seek(info->file, info->ofs);
 
-	//printf("lazy load end!!!\n");
+	printf("lazy load end!!!\n");
 	return true;
 }
 
@@ -828,7 +830,7 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-	//printf("load start!!!\n");
+	printf("load start!!!\n");
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
@@ -849,17 +851,19 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		struct load_info *aux = (struct load_info  *)malloc(sizeof(struct load_info));
-		// if(aux == NULL)	
-		// 	return false;
+		if(aux == NULL)	
+			return false;
+		memset(aux, 0, sizeof(struct load_info));  // 메모리 초기화
 		aux->file = file;
 		aux->page_read_bytes = page_read_bytes;
 		aux->page_zero_bytes = page_zero_bytes;
 		aux->writable = writable;
 		aux->ofs = ofs;
-		// printf("now ofs %d\n", ofs);
+		printf("now ofs %d\n", ofs);
 
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
+			//free(aux);  // 할당된 메모리 해제								
 			return false;
 
 		/* Advance. */
@@ -868,7 +872,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		upage += PGSIZE;
 		ofs += page_read_bytes;
 	}
-	//printf("load end!!!\n");
+	printf("load end!!!\n");
 	// 110011001100110011001100110100
 	// 110011001100110011001100110100
 	return true;

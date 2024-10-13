@@ -309,6 +309,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		enum vm_type type = page_get_type(p);
 
 		if (VM_TYPE(p->operations->type) == VM_UNINIT){
+			//if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->is_writable, p->uninit.init, p->uninit.aux)) // 왜 ANON?
 			if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, p->uninit.aux))
 				return false;
 		}else{
@@ -327,26 +328,53 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 }
 
 /* Free the resource hold by the supplemental page table */
+// void
+// supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
+// 	//printf("supplemental_page_table_kill start !!!\n");
+// 	/* TODO: Destroy all the supplemental_page_table hold by thread and
+// 	 * TODO: writeback all the modified contents to the storage. */
+// 	struct hash_iterator i;
+// 	//struct frame* frame;
+//     hash_first (&i, &spt->pages);
+// 	while (hash_next(&i)){
+// 		struct page *target = hash_entry (hash_cur (&i), struct page, page_elem);
+
+// 		if (target->frame != NULL) {
+// 			palloc_free_page(target->frame);
+// 		}
+
+// 		// frame = target->frame;
+
+// 		// //file-backed file인 경우
+// 		// if(target->operations->type == VM_FILE){
+// 		// 	do_munmap(target->va);
+// 		// }
+// 		free(target);
+// 	}
+	
+// 	hash_destroy(&spt->pages,page_dealloc);
+// 	//printf("supplemental_page_table_kill end !!!\n");
+// }
+
+// void page_dealloc(struct hash_elem *e, void *aux){
+// 	free(hash_entry(e, struct page, page_elem));
+// }
+
+/* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
-	 * TODO: writeback all the modified contents to the storage. */
-	// struct hash_iterator i;
-	// struct frame* frame;
-    // hash_first (&i, &spt->pages);
-	// while (hash_next(&i)){
-	// 	struct page *target = hash_entry (hash_cur (&i), struct page, page_elem);
-	// 	frame = target->frame;
-	// 	// //file-backed file인 경우
-	// 	// if(target->operations->type == VM_FILE){
-	// 	// 	do_munmap(target->va);
-	// 	// }
-	// 	free(frame);
-	// }
-	
-	// hash_destroy(&spt->pages,page_dealloc);
+	* TODO: writeback all the modified contents to the storage. */
+	//hash_destroy(&spt->pages, page_dealloc);
+	hash_clear(&spt->pages, page_dealloc);
 }
 
-void page_dealloc(struct hash_elem *e, void *aux){
-	// free(hash_entry(e, struct page, page_elem));
+void page_dealloc(struct hash_elem *e, void *aux UNUSED) {
+	struct page *target = hash_entry (e, struct page, page_elem);
+	destroy(target);
+	// // //file-backed file인 경우
+	// // if(target->operations->type == VM_FILE){
+	// // 	do_munmap(target->va);
+	// // }
+    free(target);
 }
