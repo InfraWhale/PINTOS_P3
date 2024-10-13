@@ -74,6 +74,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
 	int sys_number = f->R.rax;
+	#ifdef VM
+    	thread_current()->rsp = f->rsp; // 커널 모드 넘어가기 전 rsp 저장
+    #endif
 	switch (sys_number)
 	{
 

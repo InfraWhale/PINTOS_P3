@@ -69,7 +69,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
-	//void *va = pg_round_down(upage);
 	struct page* page = spt_find_page (spt, upage);
 
 	/* Check wheter the upage is already occupied or not. */
@@ -170,6 +169,7 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+    vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
 }
 
 /* Handle the fault on write_protected page */
@@ -181,7 +181,6 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	//printf("vm_try_handle_fault start!!!\n");
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	/* TODO: Validate the fault */
 	if(addr == NULL || is_kernel_vaddr(addr)){
@@ -191,8 +190,17 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (!not_present){
 		return false;
 	}
+
+	void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
+    if (!user) // kernel access인 경우 thread에서 rsp를 가져와야 한다.
+		rsp = thread_current()->rsp;
+
+	// 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
+    if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
+        vm_stack_growth(addr);
+    else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
+        vm_stack_growth(addr);
 	
-	//void *va = pg_round_down(addr);
 	struct page *page = spt_find_page(spt, addr);
 	if (page == NULL){
 		return false;
@@ -203,7 +211,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	
 	/* TODO: Your code goes here */
 	bool success = vm_do_claim_page (page);
-	//printf("vm_try_handle_fault end!!!\n");
 	return success;
 }
 
@@ -239,11 +246,6 @@ vm_do_claim_page (struct page *page) {
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 
 	struct thread *cur = thread_current();
-	// if(pml4_get_page (cur->pml4, page->va) == NULL
-	// && pml4_set_page (cur->pml4, page->va, frame->kva, page->is_writable)){
-	// 	return swap_in (page, frame->kva);
-	// }
-	// return false;
 	pml4_set_page(cur->pml4, page->va, frame->kva, page->is_writable);
 	return swap_in(page, frame->kva);
 }
@@ -310,7 +312,9 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 
 		if (VM_TYPE(p->operations->type) == VM_UNINIT){
 			//if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->is_writable, p->uninit.init, p->uninit.aux)) // 왜 ANON?
-			if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, p->uninit.aux))
+			struct load_info *copy_aux = (struct load_info *)malloc(sizeof(struct load_info));
+			memcpy(copy_aux, p->uninit.aux, sizeof(struct load_info));
+			if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, copy_aux))
 				return false;
 		}else{
 			if(vm_alloc_page(type, p->va, p->is_writable)
@@ -326,39 +330,6 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 	return true;
 	
 }
-
-/* Free the resource hold by the supplemental page table */
-// void
-// supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
-// 	//printf("supplemental_page_table_kill start !!!\n");
-// 	/* TODO: Destroy all the supplemental_page_table hold by thread and
-// 	 * TODO: writeback all the modified contents to the storage. */
-// 	struct hash_iterator i;
-// 	//struct frame* frame;
-//     hash_first (&i, &spt->pages);
-// 	while (hash_next(&i)){
-// 		struct page *target = hash_entry (hash_cur (&i), struct page, page_elem);
-
-// 		if (target->frame != NULL) {
-// 			palloc_free_page(target->frame);
-// 		}
-
-// 		// frame = target->frame;
-
-// 		// //file-backed file인 경우
-// 		// if(target->operations->type == VM_FILE){
-// 		// 	do_munmap(target->va);
-// 		// }
-// 		free(target);
-// 	}
-	
-// 	hash_destroy(&spt->pages,page_dealloc);
-// 	//printf("supplemental_page_table_kill end !!!\n");
-// }
-
-// void page_dealloc(struct hash_elem *e, void *aux){
-// 	free(hash_entry(e, struct page, page_elem));
-// }
 
 /* Free the resource hold by the supplemental page table */
 void
