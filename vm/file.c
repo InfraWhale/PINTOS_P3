@@ -50,6 +50,9 @@ file_backed_destroy (struct page *page) {
 void *
 do_mmap (void *addr, size_t length, int writable,
 		struct file *file, off_t offset) {
+	
+	// TODO : load segment 참고해서 예쁘게 만들기
+	// vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy)
 }
 
 /* Do the munmap */

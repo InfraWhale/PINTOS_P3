@@ -35,6 +35,8 @@ int read(int fd, void *buffer, unsigned size);
 int write(int fd, void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap (void *addr);
 void check_valid_buffer(void* buffer, unsigned size, void* rsp, bool to_write);
 
 struct lock filesys_lock;
@@ -137,6 +139,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
 	case SYS_CLOSE: /* Close a file. */
 		close(f->R.rdi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
 		break;
 
 	default:
@@ -382,6 +390,31 @@ void close(int fd)
 	lock_release(&filesys_lock);
 }
 
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset){
+	if (addr == NULL || is_kernel_vaddr(addr)) 
+		return NULL;
+	if (fd < 2 || length == 0)
+		return NULL;
+	if (pg_round_down(addr) != addr)
+		return NULL;
+	
+	struct file *file = process_get_file(fd);
+	if (file == NULL || file_length(file) == 0)
+		return NULL;
+	
+	do_mmap(addr, length, writable, file, offset);
+}
+
+void munmap (void *addr){
+	if (addr == NULL || is_kernel_vaddr(addr)) 
+		exit(-1);
+	if (pg_round_down(addr) != addr)
+		exit(-1);
+
+	do_munmap(addr);
+}
+
+
 struct page * check_address(void * addr) {
 	if (addr == NULL || is_kernel_vaddr(addr)) {
 		exit(-1);
@@ -394,7 +427,7 @@ void check_valid_buffer(void* buffer, unsigned size, void* rsp, bool to_write){
 	if (buffer <= USER_STACK && buffer >= rsp)
 		return;
 	
-	for(int i=0; i<size; i++){
+	for(int i=0; i<size; i += PGSIZE){ // i++ 로 바꿔야할 수도 있음
         struct page* page = check_address(buffer + i);
         if(page == NULL)
             exit(-1);
