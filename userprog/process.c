@@ -340,8 +340,10 @@ int process_wait(tid_t child_tid UNUSED)
 
 	sema_down(&child->wait_sema);
 	list_remove(&child->child_elem);
+	int result = child->exit_status;
 	sema_up(&child->exit_sema);
-	return child->exit_status;
+
+	return result;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -363,6 +365,7 @@ void process_exit(void)
 
     // 3) 자식이 종료될 때까지 대기하고 있는 부모에게 signal을 보낸다.
     sema_up(&cur->wait_sema);
+
     // 4) 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다.
     sema_down(&cur->exit_sema);
 	// printf("process_exit end \n");
