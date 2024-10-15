@@ -880,8 +880,10 @@ setup_stack(struct intr_frame *if_)
 	/* TODO: Your code goes here */
 	if(vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)){
 		success = vm_claim_page(stack_bottom);
-		if(success)
+		if(success){
 			if_->rsp = USER_STACK;
+			thread_current()->stack_bottom = stack_bottom;
+		}
 	}
 
 	// 현재 스택 포인터와 관련 레지스터 출력

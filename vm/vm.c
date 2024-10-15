@@ -169,7 +169,9 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
-    vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1);
+    if(vm_alloc_page(VM_ANON | VM_MARKER_0, pg_round_down(addr), 1))
+		thread_current()->stack_bottom -= PGSIZE;
+	
 }
 
 /* Handle the fault on write_protected page */
@@ -196,10 +198,8 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 		rsp = thread_current()->rsp;
 
 	// 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
-    if (USER_STACK - (1 << 20) <= rsp - 8 && rsp - 8 == addr && addr <= USER_STACK)
-        vm_stack_growth(addr);
-    else if (USER_STACK - (1 << 20) <= rsp && rsp <= addr && addr <= USER_STACK)
-        vm_stack_growth(addr);
+    if (rsp-8 <= addr  && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
+		vm_stack_growth(pg_round_down(addr));
 	
 	struct page *page = spt_find_page(spt, addr);
 	if (page == NULL){
