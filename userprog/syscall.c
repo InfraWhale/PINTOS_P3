@@ -21,7 +21,8 @@
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
-void check_address(void *addr);
+// void check_address(void *addr);
+struct page * check_address(void * addr);
 void halt(void);
 void exit(int status);
 int fork(const char *thread_name, struct intr_frame *f);
@@ -34,7 +35,7 @@ int read(int fd, void *buffer, unsigned size);
 int write(int fd, void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
-
+void check_valid_buffer(void* buffer, unsigned size, void* rsp, bool to_write);
 
 struct lock filesys_lock;
 
@@ -117,10 +118,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 
 	case SYS_READ: /* Read from a file. */
+		check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 1);
 		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 
 	case SYS_WRITE: /* Write to a file. */
+		check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 0);
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 
@@ -206,14 +209,18 @@ int exec(char *cmd_line)
 bool create(const char *file_created, unsigned initial_size)
 {
 	check_address(file_created);
+	lock_acquire(&filesys_lock);
 	bool success = filesys_create(file_created, initial_size);
+	lock_release(&filesys_lock);
 	return success;
 }
 
 bool remove(const char *file_removed)
 {
 	check_address(file_removed);
+	lock_acquire(&filesys_lock);
 	bool success = filesys_remove(file_removed);
+	lock_release(&filesys_lock);
 	return success;
 }
 
@@ -369,16 +376,39 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
+	lock_acquire(&filesys_lock);
 	// 프로세스에서 fd로 열려있는 파일을 닫는다.
 	process_close_file(fd);
+	lock_release(&filesys_lock);
 }
 
-void check_address(void *addr)
-{
-	struct thread *cur_t = thread_current();
-	//if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(cur_t->pml4, addr)== NULL)
-	if (addr == NULL || !is_user_vaddr(addr))
-	{
+// void check_address(void *addr)
+// {
+// 	struct thread *cur_t = thread_current();
+// 	//if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(cur_t->pml4, addr)== NULL)
+// 	if (addr == NULL || !is_user_vaddr(addr))
+// 	{
+// 		exit(-1);
+// 	}
+// }
+
+struct page * check_address(void * addr) {
+	if (addr == NULL || is_kernel_vaddr(addr)) {
 		exit(-1);
 	}
+
+	return spt_find_page(&thread_current()->spt, addr);
+}
+
+void check_valid_buffer(void* buffer, unsigned size, void* rsp, bool to_write){
+	if (buffer <= USER_STACK && buffer >= rsp)
+		return;
+	
+	for(int i=0; i<size; i++){
+        struct page* page = check_address(buffer + i);
+        if(page == NULL)
+            exit(-1);
+        if(to_write == true && page->is_writable == false)
+            exit(-1);
+    }
 }
