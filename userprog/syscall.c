@@ -382,16 +382,6 @@ void close(int fd)
 	lock_release(&filesys_lock);
 }
 
-// void check_address(void *addr)
-// {
-// 	struct thread *cur_t = thread_current();
-// 	//if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(cur_t->pml4, addr)== NULL)
-// 	if (addr == NULL || !is_user_vaddr(addr))
-// 	{
-// 		exit(-1);
-// 	}
-// }
-
 struct page * check_address(void * addr) {
 	if (addr == NULL || is_kernel_vaddr(addr)) {
 		exit(-1);
