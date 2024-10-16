@@ -368,6 +368,8 @@ void process_exit(void)
 
     // 4) 부모의 signal을 기다린다. 대기가 풀리고 나서 do_schedule(THREAD_DYING)이 이어져 다른 스레드가 실행된다.
     sema_down(&cur->exit_sema);
+	
+	hash_destroy(&cur->spt.pages, page_dealloc);
 	// printf("process_exit end \n");
 }
 

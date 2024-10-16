@@ -77,13 +77,13 @@ do_mmap (void *addr, size_t length, int writable,
 	size_t file_start_page = addr;
 	size_t file_end_page = addr + length;
 	off_t file_size = file_length(file);
+	length = file_size > length ? length : file_size;
+
 	while (length > 0){
 		size_t read_bytes = length > PGSIZE ? PGSIZE : length;
-		if(file_size < PGSIZE)
-			read_bytes = file_size;
 		size_t zero_bytes = PGSIZE - read_bytes;
 		struct load_info *aux = malloc(sizeof(struct load_info));
-		aux->file = file;
+		aux->file = file_reopen(file);
 		aux->ofs = offset;
 		aux->writable = writable;
 		aux->page_read_bytes = read_bytes;
@@ -94,9 +94,9 @@ do_mmap (void *addr, size_t length, int writable,
 		if(!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_file, aux))
 			return NULL;
 		
-		offset += PGSIZE;
-		length -= PGSIZE;
-		addr += PGSIZE;
+		offset += read_bytes;
+		length -= read_bytes;
+		addr += read_bytes;
 		// TODO : 중간에 실패하면 기존에 만들었던 aux를 free해야되지 않을까?
 	}
 	return result;

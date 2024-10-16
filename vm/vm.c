@@ -21,7 +21,6 @@ frame_less (const struct hash_elem *a_,
            const struct hash_elem *b_, void *aux UNUSED);
 
 static struct page *page_lookup (struct supplemental_page_table *spt, const void *address);
-static void page_dealloc(struct hash_elem *e, void *aux);
 
 struct hash frame_table;
 
@@ -336,7 +335,7 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	* TODO: writeback all the modified contents to the storage. */
-	//hash_destroy(&spt->pages, page_dealloc);
+	// hash_destroy(&spt->pages, page_dealloc);
 	hash_clear(&spt->pages, page_dealloc);
 }
 
