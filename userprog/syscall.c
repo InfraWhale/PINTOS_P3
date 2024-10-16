@@ -399,7 +399,7 @@ void *mmap (void *addr, size_t length, int writable, int fd, off_t offset){
 		return NULL;
 	
 	struct file *file = process_get_file(fd);
-	if (file == NULL || file_length(file) == 0)
+	if (file == NULL || file_length(file) == 0 || pg_round_down(offset) != offset)
 		return NULL;
 
 	for (size_t i = 0; i < length; i+=PGSIZE)
