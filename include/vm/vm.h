@@ -93,6 +93,8 @@ struct load_info{
 	size_t page_zero_bytes;
 	off_t ofs;
 	bool writable;
+	size_t file_start_page;
+	size_t file_end_page;
 };
 
 #define swap_in(page, v) (page)->operations->swap_in ((page), v)
