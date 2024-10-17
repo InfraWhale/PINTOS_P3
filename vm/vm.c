@@ -13,16 +13,10 @@ page_hash (const struct hash_elem *p_, void *aux UNUSED);
 static bool
 page_less (const struct hash_elem *a_,
            const struct hash_elem *b_, void *aux UNUSED);
-unsigned
-frame_hash (const struct hash_elem *p_, void *aux UNUSED);
-
-bool
-frame_less (const struct hash_elem *a_,
-           const struct hash_elem *b_, void *aux UNUSED);
 
 static struct page *page_lookup (struct supplemental_page_table *spt, const void *address);
 
-struct hash frame_table;
+struct list frame_table;
 
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
@@ -30,7 +24,7 @@ void
 vm_init (void) {
 	vm_anon_init ();
 	vm_file_init ();
-	hash_init(&frame_table, frame_hash, frame_less, NULL);
+	list_init(&frame_table);
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
@@ -161,7 +155,7 @@ vm_get_frame (void) {
 	
 	ASSERT (frame->page == NULL);
 	
-	hash_insert(&frame_table, &frame->frame_elem);
+	list_push_front(&frame_table, &frame->frame_elem);
 	return frame;
 }
 
@@ -270,21 +264,6 @@ page_less (const struct hash_elem *a_,
   const struct page *b = hash_entry (b_, struct page, page_elem);
 
   return a->va < b->va;
-}
-
-unsigned
-frame_hash (const struct hash_elem *p_, void *aux UNUSED) {
-  const struct frame *p = hash_entry (p_, struct frame, frame_elem);
-  return hash_bytes (&p->kva, sizeof p->kva);
-}
-
-bool
-frame_less (const struct hash_elem *a_,
-           const struct hash_elem *b_, void *aux UNUSED) {
-  const struct frame *a = hash_entry (a_, struct frame, frame_elem);
-  const struct frame *b = hash_entry (b_, struct frame, frame_elem);
-
-  return a->kva < b->kva;
 }
 
 /* Returns the page containing the given virtual address, or a null pointer if no such page exists. */

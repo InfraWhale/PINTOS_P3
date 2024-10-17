@@ -54,6 +54,7 @@ struct page {
 	// bool is_user;
 	// bool is_accessed;
 	// bool is_dirty;
+	int bit_idx; // for swap bit
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -72,7 +73,7 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
-	struct hash_elem frame_elem;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
