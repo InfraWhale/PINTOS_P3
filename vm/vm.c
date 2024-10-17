@@ -18,6 +18,8 @@ static struct page *page_lookup (struct supplemental_page_table *spt, const void
 
 struct list frame_table;
 
+struct lock frame_table_lock;
+
 /* Initializes the virtual memory subsystem by invoking each subsystem's
  * intialize codes. */
 void
@@ -25,6 +27,8 @@ vm_init (void) {
 	vm_anon_init ();
 	vm_file_init ();
 	list_init(&frame_table);
+
+	lock_init(&frame_table_lock);
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
@@ -155,7 +159,11 @@ vm_get_frame (void) {
 	
 	ASSERT (frame->page == NULL);
 	
-	list_push_front(&frame_table, &frame->frame_elem);
+	lock_acquire(&frame_table_lock);
+	list_push_back(&frame_table, &frame->frame_elem);
+	//list_push_front(&frame_table, &frame->frame_elem); // push_front 쓰면 터진다. 왜?
+	lock_release(&frame_table_lock);
+
 	return frame;
 }
 
