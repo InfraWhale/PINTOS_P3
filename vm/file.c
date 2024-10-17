@@ -127,13 +127,11 @@ static bool lazy_load_file(struct page *page, void *aux){
 	struct load_info *info = (struct load_info *)aux;
 	uint8_t *kpage = page->frame->kva;
 
-	lock_acquire(&filesys_lock);
 	file_seek(info->file, info->ofs);
 	int read_bytes = file_read(info->file, kpage, info->page_read_bytes);
 	if (read_bytes != (int)info->page_read_bytes){
 		palloc_free_page(kpage);
 		free(aux);
-		lock_release(&filesys_lock);
 		return false;
 	}
 	memset(kpage + info->page_read_bytes, 0, info->page_zero_bytes);
@@ -146,7 +144,6 @@ static bool lazy_load_file(struct page *page, void *aux){
 	page->file.ofs = info->ofs;
 
 	free(aux);
-	lock_release(&filesys_lock);
 
 	return true;
 }
