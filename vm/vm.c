@@ -342,9 +342,5 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 void page_dealloc(struct hash_elem *e, void *aux UNUSED) {
 	struct page *target = hash_entry (e, struct page, page_elem);
 	destroy(target);
-	// // //file-backed file인 경우
-	// // if(target->operations->type == VM_FILE){
-	// // 	do_munmap(target->va);
-	// // }
     free(target);
 }

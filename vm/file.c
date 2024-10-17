@@ -82,16 +82,20 @@ do_mmap (void *addr, size_t length, int writable,
 	while (length > 0){
 		size_t read_bytes = length > PGSIZE ? PGSIZE : length;
 		size_t zero_bytes = PGSIZE - read_bytes;
-		struct load_info *aux = malloc(sizeof(struct load_info));
-		aux->file = file_reopen(file);
-		aux->ofs = offset;
-		aux->writable = writable;
-		aux->page_read_bytes = read_bytes;
-		aux->page_zero_bytes = zero_bytes;
-		aux->file_start_page = file_start_page;
-		aux->file_end_page = file_end_page;
 
-		if(!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_file, aux))
+		struct file_page *fp = malloc(sizeof(struct file_page));
+		fp->file = file_reopen(file);
+		fp->ofs = offset;
+
+		fp->file_start_page = file_start_page;
+		fp->file_end_page = file_end_page;
+		
+		fp->page_read_bytes = read_bytes;
+		fp->page_zero_bytes = zero_bytes;
+		
+		fp->is_writable = writable;
+
+		if(!vm_alloc_page_with_initializer(VM_FILE, addr, writable, lazy_load_file, fp))
 			return NULL;
 		
 		offset += read_bytes;
@@ -123,28 +127,25 @@ do_munmap (void *addr) {
 }
 
 static bool lazy_load_file(struct page *page, void *aux){
-	struct load_info *info = (struct load_info *)aux;
+	struct file_page *fp = (struct file_page *)aux;
+
 	uint8_t *kpage = page->frame->kva;
 
 	lock_acquire(&filesys_lock);
-	file_seek(info->file, info->ofs);
-	int read_bytes = file_read(info->file, kpage, info->page_read_bytes);
-	if (info->file != NULL && read_bytes != (int)info->page_read_bytes){
+
+	file_seek(fp->file, fp->ofs);
+	int read_bytes = file_read(fp->file, kpage, fp->page_read_bytes);
+	if (fp->file != NULL && read_bytes != (int)fp->page_read_bytes){
 		palloc_free_page(kpage);
-		free(aux);
+		free(fp);
 		lock_release(&filesys_lock);
 		return false;
 	}
-	memset(kpage + info->page_read_bytes, 0, info->page_zero_bytes);
+	memset(kpage + fp->page_read_bytes, 0, fp->page_zero_bytes);
 
-	page->file.file = info->file;
-	page->file.file_start_page = info->file_start_page;
-	page->file.file_end_page = info->file_end_page;
-	page->file.page_read_bytes = info->page_read_bytes;
-	page->file.page_zero_bytes = info->page_zero_bytes;
-	page->file.ofs = info->ofs;
+	memcpy(&(page->file), fp, sizeof(struct file_page));
 
-	free(aux);
+	free(fp);
 	lock_release(&filesys_lock);
 
 	return true;
