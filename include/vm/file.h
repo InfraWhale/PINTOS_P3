@@ -16,8 +16,6 @@ struct file_page {
 	
 	size_t page_read_bytes;
 	size_t page_zero_bytes;
-	
-	bool is_writable;
 };
 
 void vm_file_init (void);
