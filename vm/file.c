@@ -38,13 +38,29 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 /* Swap in the page by read contents from the file. */
 static bool
 file_backed_swap_in (struct page *page, void *kva) {
-	struct file_page *file_page UNUSED = &page->file;
+	struct file_page *file_page = &page->file;
+	struct file *file = file_page->file;
+	file_seek(file, file_page->ofs);
+	file_read_at(file, kva, file_page->page_read_bytes, file_page->ofs);
+	return true;
 }
 
 /* Swap out the page by writeback contents to the file. */
 static bool
 file_backed_swap_out (struct page *page) {
-	struct file_page *file_page UNUSED = &page->file;
+	uint64_t *pml4 = thread_current()->pml4;
+	struct file_page *file_page = &page->file;
+
+	if(pml4_is_dirty(pml4, page->va)){
+		struct file *file = file_page->file;
+		file_seek(file, file_page->ofs);
+		file_write_at(file, page->frame->kva, file_page->page_read_bytes, file_page->ofs);
+		pml4_set_dirty(pml4, page->va, false);
+	}
+
+	pml4_clear_page(pml4, page->va);
+
+	return true;
 }
 
 /* Destory the file backed page. PAGE will be freed by the caller. */
@@ -54,6 +70,7 @@ file_backed_destroy (struct page *page) {
 	uint64_t *pml4 = thread_current()->pml4;
 	struct supplemental_page_table *spt = &thread_current()->spt;
 
+	hash_delete(&spt->pages, &page->page_elem);
 
 	if(page->frame != NULL){
 		// 페이지가 수정되었는지 확인
@@ -62,7 +79,6 @@ file_backed_destroy (struct page *page) {
 		
 		pml4_clear_page(pml4, page->va);
 		palloc_free_page(page->frame->kva);
-		hash_delete(&spt->pages, &page->page_elem);
 
 		list_remove(&page->frame->frame_elem);
 		free(page->frame);
