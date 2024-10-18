@@ -128,7 +128,7 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	 /* TODO: The policy for eviction is up to you. */
-	struct frame *victim = list_pop_front(&frame_table);
+	struct frame *victim = list_pop_front(&frame_table); // 안터지겠지 ??? ㅂㄷㅂㄷ
 
 	return victim;
 }
@@ -140,7 +140,15 @@ vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
 	struct page *victim_page = &victim->page;
-	swap_out(victim_page);
+	
+	if(swap_out(victim_page)) {
+
+		victim_page->frame = NULL;
+		victim->page = NULL;
+		memset(victim->kva, 0, PGSIZE);
+
+		return victim;
+	}
 
 	return NULL;
 }
@@ -156,14 +164,15 @@ vm_get_frame (void) {
 	/* TODO: Fill this function. */
 	frame->kva = palloc_get_page(PAL_USER);
 	frame->page = NULL;
-	if(frame->kva == NULL)
-		PANIC ("todo");
+	if(frame->kva == NULL) {
+		free(frame);
+		frame = vm_evict_frame();
+	}
 	
 	ASSERT (frame->page == NULL);
 	
 	lock_acquire(&frame_table_lock);
 	list_push_back(&frame_table, &frame->frame_elem);
-	//list_push_front(&frame_table, &frame->frame_elem); // push_front 쓰면 터진다. 왜?
 	lock_release(&frame_table_lock);
 
 	return frame;

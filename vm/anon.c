@@ -50,6 +50,21 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
+	
+	int idx = anon_page->bit_idx;
+	if(idx < 0) {
+		return false;
+	}
+	
+	for (int i = 0; i < 8; i++) {
+		disk_sector_t sec_no = (disk_sector_t) idx*8 + i;
+		disk_read(swap_disk, sec_no, kva + SECTOR_SIZE * i);
+	}
+
+	anon_page->bit_idx = -1;
+	bitmap_flip(swap_table.swap_used_map, idx);
+
+	return true;
 }
 
 /* Swap out the page by writing contents to the swap disk. */
@@ -57,14 +72,20 @@ static bool
 anon_swap_out (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	struct frame *victim_frame = &page->frame;
-	size_t idx = (swap_table.swap_used_map, 0, 1, false);
+	int idx = bitmap_scan(swap_table.swap_used_map, 0, 1, false);
+	if (idx == BITMAP_ERROR) {
+		return false;
+	}
 
 	for (int i = 0; i < 8; i++) {
 		disk_sector_t sec_no = (disk_sector_t) idx*8 + i;
 		disk_write(swap_disk, sec_no, (victim_frame->kva) + SECTOR_SIZE * i);
 	}
-	
-	
+
+	anon_page->bit_idx = idx;
+	bitmap_flip(swap_table.swap_used_map, idx);
+
+	return true;
 }
 
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
