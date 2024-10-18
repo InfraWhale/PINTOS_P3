@@ -127,8 +127,8 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 /* Get the struct frame, that will be evicted. */
 static struct frame *
 vm_get_victim (void) {
-	struct frame *victim = NULL;
 	 /* TODO: The policy for eviction is up to you. */
+	struct frame *victim = list_pop_front(&frame_table);
 
 	return victim;
 }
@@ -139,6 +139,8 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim UNUSED = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
+	struct page *victim_page = &victim->page;
+	swap_out(victim_page);
 
 	return NULL;
 }

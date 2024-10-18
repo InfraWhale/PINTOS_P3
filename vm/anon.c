@@ -56,6 +56,15 @@ anon_swap_in (struct page *page, void *kva) {
 static bool
 anon_swap_out (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+	struct frame *victim_frame = &page->frame;
+	size_t idx = (swap_table.swap_used_map, 0, 1, false);
+
+	for (int i = 0; i < 8; i++) {
+		disk_sector_t sec_no = (disk_sector_t) idx*8 + i;
+		disk_write(swap_disk, sec_no, (victim_frame->kva) + SECTOR_SIZE * i);
+	}
+	
+	
 }
 
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
