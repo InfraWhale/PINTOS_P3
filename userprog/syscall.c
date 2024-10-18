@@ -20,7 +20,9 @@
 
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void check_address(void *addr);
+
+// void check_address(void *addr);
+struct page * check_address(void * addr);
 void halt(void);
 void exit(int status);
 int fork(const char *thread_name, struct intr_frame *f);
@@ -33,6 +35,9 @@ int read(int fd, void *buffer, unsigned size);
 int write(int fd, void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap (void *addr);
+void check_valid_buffer(void* buffer, unsigned size, void* rsp, bool to_write);
 
 struct lock filesys_lock;
 
@@ -72,6 +77,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
 	int sys_number = f->R.rax;
+	#ifdef VM
+    	thread_current()->rsp = f->rsp; // 커널 모드 넘어가기 전 rsp 저장
+    #endif
 	switch (sys_number)
 	{
 
@@ -112,10 +120,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 
 	case SYS_READ: /* Read from a file. */
+		check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 1);
 		f->R.rax = read(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 
 	case SYS_WRITE: /* Write to a file. */
+		check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 0);
 		f->R.rax = write(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 
@@ -129,6 +139,12 @@ void syscall_handler(struct intr_frame *f UNUSED)
 
 	case SYS_CLOSE: /* Close a file. */
 		close(f->R.rdi);
+		break;
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
 		break;
 
 	default:
@@ -201,14 +217,18 @@ int exec(char *cmd_line)
 bool create(const char *file_created, unsigned initial_size)
 {
 	check_address(file_created);
+	lock_acquire(&filesys_lock);
 	bool success = filesys_create(file_created, initial_size);
+	lock_release(&filesys_lock);
 	return success;
 }
 
 bool remove(const char *file_removed)
 {
 	check_address(file_removed);
+	lock_acquire(&filesys_lock);
 	bool success = filesys_remove(file_removed);
+	lock_release(&filesys_lock);
 	return success;
 }
 
@@ -364,15 +384,62 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
+	lock_acquire(&filesys_lock);
 	// 프로세스에서 fd로 열려있는 파일을 닫는다.
 	process_close_file(fd);
+	lock_release(&filesys_lock);
 }
 
-void check_address(void *addr)
-{
-	struct thread *cur_t = thread_current();
-	if (addr == NULL || !is_user_vaddr(addr) || pml4_get_page(cur_t->pml4, addr)== NULL)
-	{
+void *mmap (void *addr, size_t length, int writable, int fd, off_t offset){
+	if (addr == NULL) 
+		return NULL;
+	if (fd < 2 || length == 0)
+		return NULL;
+	if (pg_round_down(addr) != addr)
+		return NULL;
+	
+	struct file *file = process_get_file(fd);
+	if (file == NULL || file_length(file) == 0 || pg_round_down(offset) != offset)
+		return NULL;
+
+	for (size_t i = 0; i < length; i+=PGSIZE)
+		if(is_kernel_vaddr(addr + i)
+		|| spt_find_page(&thread_current()->spt, addr + i) != NULL)
+			return NULL;
+	
+	return do_mmap(addr, length, writable, file, offset);
+}
+
+void munmap (void *addr){
+	if (addr == NULL || is_kernel_vaddr(addr)) 
+		exit(-1);
+	if (pg_round_down(addr) != addr)
+		exit(-1);
+	struct page *page = spt_find_page(&thread_current()->spt, addr);
+	if (page == NULL || page_get_type(page) != VM_FILE)
+		exit(-1);
+	
+	do_munmap(addr);
+}
+
+
+struct page * check_address(void * addr) {
+	if (addr == NULL || is_kernel_vaddr(addr)) {
 		exit(-1);
 	}
+
+	return spt_find_page(&thread_current()->spt, addr);
+}
+
+void check_valid_buffer(void* buffer, unsigned size, void* rsp, bool to_write){
+	if (buffer <= USER_STACK && buffer >= rsp)
+		return;
+	
+	for(int i=0; i<size; i += PGSIZE){ // i++ 로 바꿔야할 수도 있음
+        struct page* page = check_address(buffer + i);
+        if(page == NULL)
+            exit(-1);
+        if(to_write == true && page->is_writable == false)
+            exit(-1);
+    }
 }

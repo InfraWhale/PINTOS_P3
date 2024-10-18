@@ -1,5 +1,15 @@
 {
     "files.associations": {
-        "intrinsic.h": "c"
+        "intrinsic.h": "c",
+        "mmu.h": "c",
+        "malloc.h": "c",
+        "file.h": "c",
+        "debug.h": "c",
+        "inode.h": "c",
+        "off_t.h": "c",
+        "stdint.h": "c",
+        "disk.h": "c",
+        "stdbool.h": "c",
+        "stddef.h": "c"
     }
 }
