@@ -140,7 +140,7 @@ static struct frame *
 vm_evict_frame (void) {
 	struct frame *victim = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
-	struct page *victim_page = &victim->page;
+	struct page *victim_page = victim->page;
 	
 	if(swap_out(victim_page)) {
 

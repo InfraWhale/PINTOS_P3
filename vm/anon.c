@@ -71,7 +71,7 @@ anon_swap_in (struct page *page, void *kva) {
 static bool
 anon_swap_out (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	struct frame *victim_frame = &page->frame;
+	struct frame *victim_frame = page->frame;
 	int idx = bitmap_scan(swap_table.swap_used_map, 0, 1, false);
 	if (idx == BITMAP_ERROR) {
 		return false;
@@ -83,6 +83,7 @@ anon_swap_out (struct page *page) {
 	}
 
 	anon_page->bit_idx = idx;
+	pml4_clear_page(thread_current()->pml4, page->va);
 	bitmap_flip(swap_table.swap_used_map, idx);
 
 	return true;
@@ -94,10 +95,13 @@ anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
 	// TODOTODO : pml4 에서 삭제, spt 에서 삭제, frame 삭제 해야하지 않을까?
 	struct thread *cur = thread_current();
-	pml4_clear_page(cur->pml4, page->va);
-	palloc_free_page(page->frame->kva); 
 	hash_delete(&cur->spt.pages, &page->page_elem);
-	list_remove(&page->frame->frame_elem);
-	free(page->frame);
-	page->frame = NULL;
+	if (page->frame){
+		pml4_clear_page(cur->pml4, page->va);
+		palloc_free_page(page->frame->kva); 
+		list_remove(&page->frame->frame_elem);
+		free(page->frame);
+		page->frame = NULL;
+	}
+	
 }
