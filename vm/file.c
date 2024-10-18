@@ -61,9 +61,10 @@ file_backed_destroy (struct page *page) {
 			file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->ofs);
 		
 		pml4_clear_page(pml4, page->va);
+		palloc_free_page(page->frame->kva);
 		hash_delete(&spt->pages, &page->page_elem);
 
-		// TODOTODO : 프레임 테이블에서 프레임 제거해야될거 같음
+		list_remove(&page->frame->frame_elem);
 		free(page->frame);
 		page->frame = NULL;
 	}
