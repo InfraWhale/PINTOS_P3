@@ -128,7 +128,8 @@ spt_remove_page (struct supplemental_page_table *spt, struct page *page) {
 static struct frame *
 vm_get_victim (void) {
 	 /* TODO: The policy for eviction is up to you. */
-	struct frame *victim = list_pop_front(&frame_table); // 안터지겠지 ??? ㅂㄷㅂㄷ
+	struct list_elem *e = list_pop_front(&frame_table);
+	struct frame *victim = list_entry(e, struct frame, frame_elem);
 
 	return victim;
 }
@@ -137,7 +138,7 @@ vm_get_victim (void) {
  * Return NULL on error.*/
 static struct frame *
 vm_evict_frame (void) {
-	struct frame *victim UNUSED = vm_get_victim ();
+	struct frame *victim = vm_get_victim ();
 	/* TODO: swap out the victim and return the evicted frame. */
 	struct page *victim_page = &victim->page;
 	
