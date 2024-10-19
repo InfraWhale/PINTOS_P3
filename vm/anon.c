@@ -42,7 +42,6 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &anon_ops;
 
 	struct anon_page *anon_page = &page->anon;
-	anon_page->bit_idx = -1;
 	return true;
 }
 
@@ -50,8 +49,9 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	
-	int idx = anon_page->bit_idx;
+	struct frame *frame = &page->frame;
+
+	int idx = frame->bit_idx;
 	if(idx < 0) {
 		return false;
 	}
@@ -61,8 +61,17 @@ anon_swap_in (struct page *page, void *kva) {
 		disk_read(swap_disk, sec_no, kva + SECTOR_SIZE * i);
 	}
 
-	anon_page->bit_idx = -1;
+	frame->bit_idx = -1;
+	frame->kva = kva;
 	bitmap_flip(swap_table.swap_used_map, idx);
+
+	struct list_elem *e;
+	for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
+		struct page *now_page = list_entry(e, struct page, conn_elem);
+		pml4_set_page(now_page->page_thread->pml4, now_page->va, frame->kva, now_page->is_writable);
+	}
+	
+	list_remove(&frame->evict_elem);
 
 	return true;
 }
@@ -82,8 +91,14 @@ anon_swap_out (struct page *page) {
 		disk_write(swap_disk, sec_no, (victim_frame->kva) + SECTOR_SIZE * i);
 	}
 
-	anon_page->bit_idx = idx;
-	pml4_clear_page(thread_current()->pml4, page->va);
+	victim_frame->bit_idx = idx;
+
+	struct list_elem *e;
+	for (e = list_begin (&victim_frame->conn_page_list); e != list_end (&victim_frame->conn_page_list); e = list_next (e)) {
+		struct page *now_page = list_entry(e, struct page, conn_elem);
+		pml4_clear_page(now_page->page_thread->pml4, now_page->va);
+	}
+
 	bitmap_flip(swap_table.swap_used_map, idx);
 
 	return true;

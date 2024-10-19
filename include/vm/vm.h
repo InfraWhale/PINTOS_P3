@@ -49,12 +49,11 @@ struct page {
 
 	/* Your implementation */
 	struct hash_elem page_elem; /*해시 테이블 요소*/
-	// bool is_present;
+
 	bool is_writable;
-	// bool is_user;
-	// bool is_accessed;
-	// bool is_dirty;
-	int bit_idx; // for swap bit
+
+	struct list_elem conn_elem; /*frame의 conn_page_list 요소*/
+	struct thread *page_thread; /*이 페이지가 속한 스레드 - 여기서 pml4를 가져온다.*/
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -74,6 +73,12 @@ struct frame {
 	void *kva;
 	struct page *page;
 	struct list_elem frame_elem;
+
+	int bit_idx; // for swap bit
+
+	struct list conn_page_list;
+
+	struct list_elem evict_elem; /* evict list 요소 */
 };
 
 /* The function table for page operations.

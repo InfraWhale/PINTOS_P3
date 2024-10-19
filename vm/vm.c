@@ -17,6 +17,7 @@ page_less (const struct hash_elem *a_,
 static struct page *page_lookup (struct supplemental_page_table *spt, const void *address);
 
 struct list frame_table;
+struct list evict_list;
 
 struct lock frame_table_lock;
 
@@ -26,7 +27,9 @@ void
 vm_init (void) {
 	vm_anon_init ();
 	vm_file_init ();
+
 	list_init(&frame_table);
+	list_init(&evict_list);
 
 	lock_init(&frame_table_lock);
 #ifdef EFILESYS  /* For project 4 */
@@ -90,6 +93,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 		uninit_new(page, upage, init, type, aux, initializer);
 		page->is_writable = writable;
+		page->page_thread = thread_current();
 		
 		/* TODO: Insert the page into the spt. */
 		return spt_insert_page(spt, page);
@@ -144,11 +148,16 @@ vm_evict_frame (void) {
 	
 	if(swap_out(victim_page)) {
 
-		victim_page->frame = NULL;
-		victim->page = NULL;
+		list_push_back(&evict_list, &victim_page->frame->evict_elem);
+
 		memset(victim->kva, 0, PGSIZE);
 
-		return victim;
+		struct frame *new_frame = malloc(sizeof(struct frame));
+
+		new_frame->kva = victim->kva;
+		victim->kva = NULL;
+
+		return new_frame;
 	}
 
 	return NULL;
@@ -164,11 +173,14 @@ vm_get_frame (void) {
 	ASSERT (frame != NULL);
 	/* TODO: Fill this function. */
 	frame->kva = palloc_get_page(PAL_USER);
-	frame->page = NULL;
+	
 	if(frame->kva == NULL) {
 		free(frame);
 		frame = vm_evict_frame();
 	}
+	frame->page = NULL;
+	list_init(&frame->conn_page_list);
+	frame->bit_idx = -1;
 	
 	ASSERT (frame->page == NULL);
 	
@@ -188,6 +200,7 @@ vm_stack_growth (void *addr UNUSED) {
 }
 
 /* Handle the fault on write_protected page */
+// 이걸 써서 writable false로 page fault 인 경우 핸들링 
 static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
@@ -253,13 +266,15 @@ vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
 
 	/* Set links */
-	frame->page = page;
+	frame->page = page; /* 여기 들어가는건 부모 */
+	list_push_back(&frame->conn_page_list, &page->conn_elem);
 	page->frame = frame;
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 
 	struct thread *cur = thread_current();
-	pml4_set_page(cur->pml4, page->va, frame->kva, page->is_writable);
+	// pml4_set_page(cur->pml4, page->va, frame->kva, page->is_writable); // swap_in 안에서 해줘야
+
 	return swap_in(page, frame->kva);
 }
 
