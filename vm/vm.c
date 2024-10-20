@@ -212,38 +212,51 @@ bool
 vm_try_handle_fault (struct intr_frame *f, void *addr,
 		bool user, bool write, bool not_present) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
+	//printf("vm_try_handle_fault start !!!\n");
 	/* TODO: Validate the fault */
+	
 	if(addr == NULL || is_kernel_vaddr(addr)){
+		//printf("실화임? !!!\n");
 		return false;
 	}
+	//printf("vm_try_handle_fault 1 !!!\n");
 
 	struct page *page = spt_find_page(spt, addr);
-	if (!not_present && write)
-	return vm_handle_wp(page);
-	
-	// if (!not_present){
-	// 	return false;
-	// }
 
-	void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
-    if (!user) // kernel access인 경우 thread에서 rsp를 가져와야 한다.
+	//printf("vm_try_handle_fault 2 !!!\n");
+	if (!not_present){
+		if(write) {
+			 return vm_handle_wp(page);
+		} else {
+			return false;
+		}
+	}
+	//printf("vm_try_handle_fault 3 !!!\n");
+
+	if (page == NULL){
+
+		void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
+    	if (!user) // kernel access인 경우 thread에서 rsp를 가져와야 한다.
 		rsp = thread_current()->rsp;
 
 	// 스택 확장으로 처리할 수 있는 폴트인 경우, vm_stack_growth를 호출한다.
-    if (rsp-8 <= addr  && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
-		vm_stack_growth(pg_round_down(addr));
-	
-	// struct page *page = spt_find_page(spt, addr);
-	if (page == NULL){
-		return false;
+		if (rsp-8 <= addr  && USER_STACK - 0x100000 <= addr && addr <= USER_STACK) {
+			//printf("b4 vm_stack_growth !!!\n");
+			vm_stack_growth(pg_round_down(addr));
+			return true;
+		}
+		else {
+			return false;
+		}
 	}
+	
 	if (write && !page->is_writable){
 		return false;
 	}
 	
 	/* TODO: Your code goes here */
-	bool success = vm_do_claim_page (page);
-	return success;
+	//printf("vm_try_handle_fault end !!!\n");
+	return vm_do_claim_page (page);
 }
 
 /* Free the page.
