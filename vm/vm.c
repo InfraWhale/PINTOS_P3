@@ -202,7 +202,23 @@ vm_stack_growth (void *addr UNUSED) {
 /* Handle the fault on write_protected page */
 // 이걸 써서 writable false로 page fault 인 경우 핸들링 
 static bool
-vm_handle_wp (struct page *page UNUSED) {
+vm_handle_wp (struct page *page) {
+	if(!list_empty(&page->frame->conn_page_list))
+		list_remove(&page->conn_elem);
+	struct frame *old_frame = page->frame;
+	struct frame *frame = vm_get_frame();
+
+	frame->page = page;
+	list_push_back(&frame->conn_page_list, &page->conn_elem);
+
+	memcpy(frame->kva, old_frame->kva, PGSIZE);
+	page->frame = frame;
+
+	if(list_empty(&old_frame->conn_page_list)){
+		palloc_free_page(old_frame->kva);
+		free(old_frame);
+	}
+	return pml4_set_page(page->page_thread->pml4, page->va, frame->kva, page->is_writable);
 }
 
 /* Return true on success */
@@ -215,9 +231,9 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 		return false;
 	}
 	
-	if (!not_present){
-		return false;
-	}
+	// if (!not_present){
+	// 	return false;
+	// }
 
 	void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
     if (!user) // kernel access인 경우 thread에서 rsp를 가져와야 한다.
@@ -231,8 +247,13 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 	if (page == NULL){
 		return false;
 	}
-	if (write && !page->is_writable){
-		return false;
+	if (write){
+		if(!page->is_writable)
+			return false;
+		if(page->frame){
+			bool result = vm_handle_wp(page);
+			return result;
+		}
 	}
 	
 	/* TODO: Your code goes here */
@@ -274,8 +295,13 @@ vm_do_claim_page (struct page *page) {
 
 	struct thread *cur = thread_current();
 	// pml4_set_page(cur->pml4, page->va, frame->kva, page->is_writable); // swap_in 안에서 해줘야
-
-	return swap_in(page, frame->kva);
+	struct list_elem *e;
+	for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
+		struct page *now_page = list_entry(e, struct page, conn_elem);
+		pml4_set_page(now_page->page_thread->pml4, now_page->va, frame->kva, now_page->is_writable);
+	}
+	bool result = swap_in(page, frame->kva);
+	return result;
 }
 
 /* Initialize new supplemental page table */
@@ -330,11 +356,12 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 			if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, copy_aux))
 				return false;
 		}else{
-			if(vm_alloc_page(type, p->va, p->is_writable)
-			&& vm_claim_page(p->va)){
+			if(vm_alloc_page(type, p->va, p->is_writable)){
 				struct page* copy = spt_find_page(dst, p->va);
-				memcpy(copy->frame->kva, p->frame->kva, PGSIZE);
-				copy->frame->page = copy;
+				
+				copy->frame = p->frame;
+				list_push_back(&p->frame->conn_page_list, &copy->conn_elem);
+				pml4_set_page(copy->page_thread->pml4, p->va, p->frame->kva, false);
 			}else
 				return false;
 		}

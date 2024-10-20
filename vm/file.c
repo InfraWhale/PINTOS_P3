@@ -32,6 +32,7 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
+	pml4_set_page(page->page_thread->pml4, page->va, page->frame->kva, page->is_writable);
 	return true;
 }
 
@@ -42,7 +43,43 @@ file_backed_swap_in (struct page *page, void *kva) {
 	struct file *file = file_page->file;
 	file_seek(file, file_page->ofs);
 	file_read_at(file, kva, file_page->page_read_bytes, file_page->ofs);
+
+	// struct list_elem *e;
+	struct frame *frame = page->frame;
+	// for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
+	// 	struct page *page = list_entry(e, struct page, conn_elem);
+	// 	if(!pml4_set_page(page->page_thread->pml4, page->va, frame->kva, false))
+	// 		return false;
+	// }
+
+	list_remove(&frame->evict_elem);
 	return true;
+}
+
+static bool check_dirty(struct frame *frame){
+	struct list_elem *e;
+	for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
+		struct page *page = list_entry(e, struct page, conn_elem);
+		if(pml4_is_dirty(page->page_thread->pml4, page->va))
+			return true;
+	}
+	return false;
+}
+
+static void set_dirty(struct frame *frame, bool dirty){
+	struct list_elem *e;
+	for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
+		struct page *page = list_entry(e, struct page, conn_elem);
+		pml4_set_dirty(page->page_thread->pml4, page->va, dirty);
+	}
+}
+
+static void for_pml4_clear_page(struct frame *frame){
+	struct list_elem *e;
+	for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
+		struct page *page = list_entry(e, struct page, conn_elem);
+		pml4_clear_page(page->page_thread->pml4, page->va);
+	}
 }
 
 /* Swap out the page by writeback contents to the file. */
@@ -51,14 +88,14 @@ file_backed_swap_out (struct page *page) {
 	uint64_t *pml4 = thread_current()->pml4;
 	struct file_page *file_page = &page->file;
 
-	if(pml4_is_dirty(pml4, page->va)){
+	if(check_dirty(page->frame)){
 		struct file *file = file_page->file;
 		file_seek(file, file_page->ofs);
 		file_write_at(file, page->frame->kva, file_page->page_read_bytes, file_page->ofs);
-		pml4_set_dirty(pml4, page->va, false);
+		set_dirty(page->frame, false);
 	}
 
-	pml4_clear_page(pml4, page->va);
+	for_pml4_clear_page(page->frame);
 
 	return true;
 }
@@ -74,14 +111,20 @@ file_backed_destroy (struct page *page) {
 
 	if(page->frame != NULL){
 		// 페이지가 수정되었는지 확인
-		if(pml4_is_dirty(pml4, page->va))// 페이지가 수정되었으면 디스크에 있는 파일에 반영
+		if(check_dirty(page->frame)){// 페이지가 수정되었으면 디스크에 있는 파일에 반영
 			file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->ofs);
-		
-		pml4_clear_page(pml4, page->va);
-		palloc_free_page(page->frame->kva);
+			set_dirty(page->frame, false);
+		}
 
-		list_remove(&page->frame->frame_elem);
-		free(page->frame);
+		pml4_clear_page(pml4, page->va);
+
+		list_remove(&page->conn_elem);
+		if(list_empty(&page->frame->conn_page_list)){
+			// if(page->frame->kva)
+			// 	palloc_free_page(page->frame->kva);
+			free(page->frame);
+			list_remove(&page->frame->frame_elem);
+		}
 		page->frame = NULL;
 	}
 }

@@ -412,6 +412,8 @@ void thread_yield(void)
 	struct thread *curr = thread_current();
 	enum intr_level old_level; // 인터럽트 상태를 저장할 변수
 	ASSERT(!intr_context());
+	if (list_empty(&ready_list))
+		return;
 	// 인터럽트 비활성화
 	old_level = intr_disable();
 	// 유휴 스레드가 아니면

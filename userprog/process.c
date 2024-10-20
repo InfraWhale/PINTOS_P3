@@ -38,6 +38,8 @@ static void
 process_init(void)
 {
 	struct thread *current = thread_current();
+    sema_up(&current->load_sema);
+
 }
 
 /* "initd"라는 첫 번째 사용자 프로그램을 FILE_NAME에서 로드하여 시작합니다.
@@ -219,7 +221,6 @@ __do_fork(void *aux)
     current->next_fd = parent->next_fd;
 
     // 로드가 완료될 때까지 기다리고 있던 부모 대기 해제
-    sema_up(&current->load_sema);
     process_init();
 
     /* Finally, switch to the newly created process. */

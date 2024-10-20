@@ -42,6 +42,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &anon_ops;
 
 	struct anon_page *anon_page = &page->anon;
+	pml4_set_page(page->page_thread->pml4, page->va, page->frame->kva, page->is_writable);
 	return true;
 }
 
@@ -49,7 +50,7 @@ anon_initializer (struct page *page, enum vm_type type, void *kva) {
 static bool
 anon_swap_in (struct page *page, void *kva) {
 	struct anon_page *anon_page = &page->anon;
-	struct frame *frame = &page->frame;
+	struct frame *frame = page->frame;
 
 	int idx = frame->bit_idx;
 	if(idx < 0) {
@@ -65,12 +66,6 @@ anon_swap_in (struct page *page, void *kva) {
 	frame->kva = kva;
 	bitmap_flip(swap_table.swap_used_map, idx);
 
-	struct list_elem *e;
-	for (e = list_begin (&frame->conn_page_list); e != list_end (&frame->conn_page_list); e = list_next (e)) {
-		struct page *now_page = list_entry(e, struct page, conn_elem);
-		pml4_set_page(now_page->page_thread->pml4, now_page->va, frame->kva, now_page->is_writable);
-	}
-	
 	list_remove(&frame->evict_elem);
 
 	return true;
@@ -108,15 +103,20 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	// TODOTODO : pml4 에서 삭제, spt 에서 삭제, frame 삭제 해야하지 않을까?
 	struct thread *cur = thread_current();
 	hash_delete(&cur->spt.pages, &page->page_elem);
+
 	if (page->frame){
 		pml4_clear_page(cur->pml4, page->va);
-		palloc_free_page(page->frame->kva); 
-		list_remove(&page->frame->frame_elem);
-		free(page->frame);
+
+		list_remove(&page->conn_elem);
+		if(list_empty(&page->frame->conn_page_list)){
+			// if(page->frame->kva)
+			// 	palloc_free_page(page->frame->kva);
+			free(page->frame);
+			// list_remove(&page->frame->frame_elem);
+		}
+
 		page->frame = NULL;
 	}
-	
 }
