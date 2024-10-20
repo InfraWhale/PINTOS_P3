@@ -51,6 +51,7 @@ struct page {
 	struct hash_elem page_elem; /*해시 테이블 요소*/
 	// bool is_present;
 	bool is_writable;
+	bool is_accessible;
 	// bool is_user;
 	// bool is_accessed;
 	// bool is_dirty;

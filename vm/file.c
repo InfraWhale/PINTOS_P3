@@ -78,7 +78,7 @@ file_backed_destroy (struct page *page) {
 			file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->ofs);
 		
 		pml4_clear_page(pml4, page->va);
-		palloc_free_page(page->frame->kva);
+		// palloc_free_page(page->frame->kva);
 
 		list_remove(&page->frame->frame_elem);
 		free(page->frame);

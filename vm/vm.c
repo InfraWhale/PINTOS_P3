@@ -188,8 +188,23 @@ vm_stack_growth (void *addr UNUSED) {
 }
 
 /* Handle the fault on write_protected page */
-static bool
-vm_handle_wp (struct page *page UNUSED) {
+bool vm_handle_wp(struct page *page UNUSED) {
+    if (!page->is_accessible)
+        return false;
+
+    void *kva = page->frame->kva;
+
+    page->frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+
+    if (page->frame->kva == NULL)
+        page->frame = vm_evict_frame();  // Swap Out 수행
+
+    memcpy(page->frame->kva, kva, PGSIZE);
+
+    if (!pml4_set_page(thread_current()->pml4, page->va, page->frame->kva, page->is_accessible))
+        return false;
+
+    return true;
 }
 
 /* Return true on success */
@@ -201,10 +216,14 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
 	if(addr == NULL || is_kernel_vaddr(addr)){
 		return false;
 	}
+
+	struct page *page = spt_find_page(spt, addr);
+	if (!not_present && write)
+	return vm_handle_wp(page);
 	
-	if (!not_present){
-		return false;
-	}
+	// if (!not_present){
+	// 	return false;
+	// }
 
 	void *rsp = f->rsp; // user access인 경우 rsp는 유저 stack을 가리킨다.
     if (!user) // kernel access인 경우 thread에서 rsp를 가져와야 한다.
@@ -214,7 +233,7 @@ vm_try_handle_fault (struct intr_frame *f, void *addr,
     if (rsp-8 <= addr  && USER_STACK - 0x100000 <= addr && addr <= USER_STACK)
 		vm_stack_growth(pg_round_down(addr));
 	
-	struct page *page = spt_find_page(spt, addr);
+	// struct page *page = spt_find_page(spt, addr);
 	if (page == NULL){
 		return false;
 	}
@@ -297,36 +316,82 @@ page_lookup (struct supplemental_page_table *spt, const void *va) {
 	return e != NULL ? hash_entry (e, struct page, page_elem) : NULL;
 }
 
+static bool vm_copy_claim_page(struct supplemental_page_table *dst, void *va, void *kva, bool writable) {
+	// struct page* copy = spt_find_page(dst, va);
+	// if (copy == NULL){
+	// 	return false;
+	// }
+
+	// struct frame *frame = (struct frame*)malloc(sizeof(struct frame));
+
+	// frame->kva = palloc_get_page(PAL_USER); // 바꿀 부분
+	// frame->page = NULL;
+	// if(frame->kva == NULL) {
+	// 	free(frame);
+	// 	frame = vm_evict_frame();
+	// }
+		
+	// lock_acquire(&frame_table_lock);
+	// list_push_back(&frame_table, &frame->frame_elem);
+	// lock_release(&frame_table_lock);
+
+	// frame->page = copy;
+	// copy->frame = frame;
+
+	// struct thread *cur = thread_current();
+	// pml4_set_page(cur->pml4, copy->va, frame->kva, page->is_writable);
+
+	// return swap_in(copy, frame->kva);
+
+	struct page* copy = spt_find_page(dst, va);
+
+	if (copy == NULL){
+		return false;
+	}
+	struct frame *frame = malloc(sizeof(struct frame));
+
+	if(!frame)
+		return false;
+	frame->kva = kva;
+	lock_acquire(&frame_table_lock);
+	list_push_back(&frame_table, &frame->frame_elem);
+	lock_release(&frame_table_lock);
+	
+	copy->is_accessible = writable;
+	frame->page = copy;
+	copy->frame = frame;
+
+	pml4_set_page(thread_current()->pml4, copy->va, frame->kva, false);
+
+	return swap_in(copy, frame->kva);
+}
+
 /* Copy supplemental page table from src to dst */
 bool
 supplemental_page_table_copy (struct supplemental_page_table *dst,
-		struct supplemental_page_table *src) {
-	struct hash_iterator i;
-	struct hash_elem *elem;
-	hash_first(&i, &src->pages);
-	while ((elem = hash_next(&i))){
-		struct page *p = hash_entry(elem, struct page, page_elem);
-		enum vm_type type = page_get_type(p);
-
-		if (VM_TYPE(p->operations->type) == VM_UNINIT){
-			//if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->is_writable, p->uninit.init, p->uninit.aux)) // 왜 ANON?
-			struct load_info *copy_aux = (struct load_info *)malloc(sizeof(struct load_info));
-			memcpy(copy_aux, p->uninit.aux, sizeof(struct load_info));
-			if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, copy_aux))
+        struct supplemental_page_table *src) {
+    struct hash_iterator i;
+    struct hash_elem *elem;
+    hash_first(&i, &src->pages);
+    while ((elem = hash_next(&i))){
+        struct page *p = hash_entry(elem, struct page, page_elem);
+        enum vm_type type = page_get_type(p);
+        if (VM_TYPE(p->operations->type) == VM_UNINIT){
+            //if(!vm_alloc_page_with_initializer(VM_ANON, p->va, p->is_writable, p->uninit.init, p->uninit.aux)) // 왜 ANON?
+            struct load_info *copy_aux = (struct load_info *)malloc(sizeof(struct load_info));
+            memcpy(copy_aux, p->uninit.aux, sizeof(struct load_info));
+            if(!vm_alloc_page_with_initializer(type, p->va, p->is_writable, p->uninit.init, copy_aux))
+                return false;
+        }else{
+            if(!vm_alloc_page(type, p->va, p->is_writable)){
 				return false;
-		}else{
-			if(vm_alloc_page(type, p->va, p->is_writable)
-			&& vm_claim_page(p->va)){
-				struct page* copy = spt_find_page(dst, p->va);
-				memcpy(copy->frame->kva, p->frame->kva, PGSIZE);
-				copy->frame->page = copy;
-			}else
+			}
+			if(!vm_copy_claim_page(dst, p->va, p->frame->kva, p->is_writable)) {
 				return false;
-		}
-		
-	}
-	return true;
-	
+			}
+        }
+    }
+    return true;
 }
 
 /* Free the resource hold by the supplemental page table */

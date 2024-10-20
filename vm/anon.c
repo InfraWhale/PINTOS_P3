@@ -98,7 +98,7 @@ anon_destroy (struct page *page) {
 	hash_delete(&cur->spt.pages, &page->page_elem);
 	if (page->frame){
 		pml4_clear_page(cur->pml4, page->va);
-		palloc_free_page(page->frame->kva); 
+		//palloc_free_page(page->frame->kva); 
 		list_remove(&page->frame->frame_elem);
 		free(page->frame);
 		page->frame = NULL;
