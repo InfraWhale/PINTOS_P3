@@ -115,7 +115,6 @@ do_mmap (void *addr, size_t length, int writable,
 		offset += read_bytes;
 		length -= read_bytes;
 		addr += read_bytes;
-		// TODO : 중간에 실패하면 기존에 만들었던 aux를 free해야되지 않을까?
 	}
 	return result;
 }

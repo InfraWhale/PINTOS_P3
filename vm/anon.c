@@ -93,7 +93,6 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
-	// TODOTODO : pml4 에서 삭제, spt 에서 삭제, frame 삭제 해야하지 않을까?
 	struct thread *cur = thread_current();
 	hash_delete(&cur->spt.pages, &page->page_elem);
 	if (page->frame){

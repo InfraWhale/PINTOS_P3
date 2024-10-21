@@ -285,7 +285,6 @@ int process_exec(void *f_name)
 
 void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받았으므로 이중 포인터 사용
 {
-	// printf("argument_stack !!!\n");
     // 프로그램 이름, 인자 문자열 push
     for (int i = count - 1; i > -1; i--)
     {
@@ -320,7 +319,6 @@ void argument_stack(char **parse, int count, void **rsp) // 주소를 전달받�
     (*rsp) -= 8;
     **(void ***)rsp = 0; // void* 타입의 0 추가
 
-	// printf("argument_stack: Final rsp = %p\n", *rsp);
 }
 
 /* 스레드 TID가 종료될 때까지 기다린 후 그 종료 상태를 반환합니다.
@@ -350,7 +348,6 @@ int process_wait(tid_t child_tid UNUSED)
 void process_exit(void)
 {
     struct thread *cur = thread_current();
-	// printf("process_exit start \n");
 
     // 1) FDT의 모든 파일을 닫는다.
     for (int i = 2; i < FDT_COUNT_LIMIT; i++) {
@@ -370,7 +367,6 @@ void process_exit(void)
     sema_down(&cur->exit_sema);
 	
 	hash_destroy(&cur->spt.pages, page_dealloc);
-	// printf("process_exit end \n");
 }
 
 /* 현재 프로세스의 자원을 해제합니다. */
@@ -655,7 +651,6 @@ int process_add_file(struct file *f)
 
 struct file *process_get_file(int fd)
 {
-	// printf("process_get_file start!!!\n");
 	struct thread *curr = thread_current();
 	struct file **fdt = curr->fdt;
 
@@ -665,7 +660,6 @@ struct file *process_get_file(int fd)
 		return NULL;
 	
 	// 파일 디스크럽터에 해당하는 파일 객체를 반환한다.
-	// printf("process_get_file end!!!\n");
 	return fdt[fd];
 }
 
@@ -737,7 +731,6 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* 프로세스의 주소 공간에 페이지를 추가합니다. */
 		if (!install_page(upage, kpage, writable))
 		{
-			// printf("fail\n");
 			palloc_free_page(kpage);
 			return false;
 		}
@@ -829,7 +822,6 @@ static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 			 uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
-	// printf("load start!!!\n");
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
